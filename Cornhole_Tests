@@ -1,0 +1,158 @@
+import os
+import unittest
+import pygame
+import math
+
+# Helps pygame run in headless test environments
+os.environ["SDL_VIDEODRIVER"] = "dummy"
+
+from Midterm_Code import *
+
+
+class TestHelperFunctions(unittest.TestCase):
+
+    def test_clamp_within_range(self):
+        self.assertEqual(clamp(5, 0, 10), 5)
+
+    def test_clamp_below_min(self):
+        self.assertEqual(clamp(-3, 0, 10), 0)
+
+    def test_clamp_above_max(self):
+        self.assertEqual(clamp(15, 0, 10), 10)
+
+    def test_clamp_at_boundaries(self):
+        self.assertEqual(clamp(0, 0, 10), 0)
+        self.assertEqual(clamp(10, 0, 10), 10)
+
+    def test_distance_squared_same_point(self):
+        self.assertEqual(distance_squared((0, 0), (0, 0)), 0)
+
+    def test_distance_squared_known_value(self):
+        self.assertEqual(distance_squared((0, 0), (3, 4)), 25)
+
+    def test_distance_squared_negative_coords(self):
+        self.assertEqual(distance_squared((-1, -1), (2, 3)), 25)
+
+
+class TestBag(unittest.TestCase):
+
+    def setUp(self):
+        self.bag = Bag((100, 400), 10)
+
+    def test_initial_position(self):
+        self.assertEqual(self.bag.pos, [100, 400])
+        self.assertFalse(self.bag.in_flight)
+        self.assertFalse(self.bag.sliding)
+
+    def test_reset(self):
+        self.bag.pos = [500, 200]
+        self.bag.in_flight = True
+        self.bag.sliding = True
+        self.bag.slide_speed = 5
+        self.bag.slide_dist_left = 20
+
+        self.bag.reset()
+
+        self.assertEqual(self.bag.pos, [100, 400])
+        self.assertEqual(self.bag.vel, [0.0, 0.0])
+        self.assertFalse(self.bag.in_flight)
+        self.assertFalse(self.bag.sliding)
+        self.assertEqual(self.bag.slide_speed, 0.0)
+        self.assertEqual(self.bag.slide_dist_left, 0.0)
+
+    def test_launch_sets_in_flight(self):
+        self.bag.launch(45, 10)
+        self.assertTrue(self.bag.in_flight)
+        self.assertFalse(self.bag.sliding)
+
+    def test_launch_velocity_direction(self):
+        self.bag.launch(45, 10)
+        self.assertGreater(self.bag.vel[0], 0)
+        self.assertLess(self.bag.vel[1], 0)
+
+    def test_launch_horizontal(self):
+        self.bag.launch(0, 10)
+        self.assertAlmostEqual(self.bag.vel[0], 10, places=2)
+        self.assertAlmostEqual(self.bag.vel[1], 0, places=2)
+
+    def test_update_no_movement_when_grounded(self):
+        self.bag.update(0.35)
+        self.assertEqual(self.bag.pos, [100, 400])
+
+    def test_update_applies_gravity(self):
+        self.bag.launch(45, 10)
+        initial_vy = self.bag.vel[1]
+        self.bag.update(0.35)
+        self.assertGreater(self.bag.vel[1], initial_vy)
+
+    def test_start_slide_sets_sliding_state(self):
+        self.bag.start_slide((0, -1), 5, 20)
+        self.assertFalse(self.bag.in_flight)
+        self.assertTrue(self.bag.sliding)
+        self.assertAlmostEqual(self.bag.slide_speed, 5)
+        self.assertAlmostEqual(self.bag.slide_dist_left, 20)
+
+    def test_update_moves_bag_while_sliding(self):
+        self.bag.start_slide((0, -1), 5, 20)
+        start_pos = self.bag.pos[:]
+        self.bag.update(0.35)
+
+        self.assertEqual(self.bag.pos[0], start_pos[0])
+        self.assertLess(self.bag.pos[1], start_pos[1])
+        self.assertLess(self.bag.slide_speed, 5)
+        self.assertLess(self.bag.slide_dist_left, 20)
+
+    def test_slide_stops_when_distance_runs_out(self):
+        self.bag.start_slide((0, -1), 5, 0)
+        self.bag.update(0.35)
+        self.assertFalse(self.bag.sliding)
+
+
+class TestBoard(unittest.TestCase):
+
+    def setUp(self):
+        pygame.init()
+        self.board = Board(
+            bl=(620, 460),
+            br=(860, 460),
+            tl=(760, 280),
+            tr=(880, 280),
+            hole_uv=(0.55, 0.80),
+            hole_radius=22
+        )
+
+    def tearDown(self):
+        pygame.quit()
+
+    def test_hole_center_returns_point(self):
+        hc = self.board.hole_center_xy()
+        self.assertIsInstance(hc, tuple)
+        self.assertEqual(len(hc), 2)
+
+    def test_hole_center_is_on_board(self):
+        hc = self.board.hole_center_xy()
+        self.assertTrue(self.board.point_in_board(hc[0], hc[1]))
+
+    def test_point_in_board_true_for_inside_point(self):
+        self.assertTrue(self.board.point_in_board(750, 380))
+
+    def test_point_in_board_false_for_outside_point(self):
+        self.assertFalse(self.board.point_in_board(100, 100))
+
+    def test_corner_point_is_not_counted_as_inside(self):
+        self.assertFalse(self.board.point_in_board(620, 460))
+
+    def test_just_outside_bottom_left_is_not_on_board(self):
+        self.assertFalse(self.board.point_in_board(619, 461))
+
+    def test_uv_to_xy_returns_bottom_edge_at_v_zero(self):
+        x, y = self.board.uv_to_xy(0.5, 0.0)
+        self.assertAlmostEqual(y, 460, places=2)
+
+    def test_uv_to_xy_returns_top_edge_at_v_one(self):
+        x, y = self.board.uv_to_xy(0.5, 1.0)
+        self.assertAlmostEqual(y, 280, places=2)
+
+
+if __name__ == "__main__":
+    unittest.main()
