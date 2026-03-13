@@ -1,6 +1,3 @@
-
-#Cornhole Game – Midterm Checkpoint 1
-
 #This program implements a 2D cornhole game.
 #The game allows the user to aim, charge power, and throw a bean bag
 #toward a cornhole board. The bag follows projectile motion with gravity.
@@ -139,6 +136,7 @@ class Game:
         self.charging = False
         self.score = 0
         self.last_result = ""
+        self.hole_forgiveness = 20
 
     def handle_events(self):
         for event in pygame.event.get():
@@ -174,6 +172,16 @@ class Game:
     def update(self):
         self.bag.update(self.gravity)
 
+        #check for bag going in hole while in the air
+        if self.bag.in_flight and self.board.rect.collidepoint(int(self.bag.pos[0]), int(self.bag.pos[1])):
+            effective = self.board.hole_radius + self.hole_forgiveness
+            if distance_squared(self.bag.pos, self.board.hole_center) <= effective * effective:
+                self.score += 3
+                self.last_result = "IN THE HOLE! (+3)"
+                self.bag.reset()
+                self.power = 0
+                return
+            
         if self.bag.in_flight and self.bag.pos[1] >= self.ground_y - self.bag.radius:
             self.bag.pos[1] = self.ground_y - self.bag.radius
             self.bag.in_flight = False
