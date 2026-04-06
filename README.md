@@ -53,6 +53,14 @@ To verify the installation run:
 
 "python -m pygame"
 
+Alternate troubleshoot(run in terminal):
+
+cd "***Your Filepath** Project/Cornhole"
+/opt/homebrew/bin/python3.12 -m venv venv
+source venv/bin/activate
+python -m pip install pygame
+python -c "import pygame; print(pygame.__version__)"
+python Midterm_Code.py
 
 # Running the Game
 
