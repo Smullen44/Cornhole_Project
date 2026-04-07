@@ -280,6 +280,16 @@ class Game:
         self.bag.update(self.gravity, self.wind)
         bag_xy = (self.bag.pos[0], self.bag.pos[1])
 
+        #Fixes bag getting stuck on edge of board glitch
+        if self.bag.sliding and not self.board.point_in_board(bag_xy[0], bag_xy[1]):
+            self.bag.sliding = False
+            self.last_result = "OFF THE BOARD (+0)"
+            self.bag.reset()
+            self.power = 0
+            self.angle = 45
+            self.change_wind()
+            return
+
         # Check for hole while in air or sliding
         if (self.bag.in_flight or self.bag.sliding) and self.board.point_in_board(bag_xy[0], bag_xy[1]):
             hc = self.board.hole_center_xy()
