@@ -219,8 +219,11 @@ class Game:
         self.power = 0.0
         self.charging = False
         self.score = 0
-        self.last_result = ""
+        self.strikes = 0
+        self.game_over = False
         self.game_won = False
+        self.last_result = ""
+        
 
         self.wind = 0.0
         self.change_wind()
@@ -272,11 +275,13 @@ class Game:
                     self.power = 0
                     self.angle = 45
                     self.change_wind()
+                    self.strikes = 0
+                    self.game_over = False
                     self.game_won = False
                     self.last_result = ""
                     self.score = 0
 
-                if event.key == pygame.K_SPACE and (not self.bag.in_flight) and (not self.bag.sliding) and (not self.game_won):
+                if event.key == pygame.K_SPACE and (not self.bag.in_flight) and (not self.bag.sliding) and (not self.game_over) and (not self.game_won):
                     self.charging = True
 
             if event.type == pygame.KEYUP:
@@ -297,13 +302,22 @@ class Game:
                 self.power = clamp(self.power + 0.25, 0, 18)
 
     def update(self):
+        if self.game_over or self.game_won:
+            return
+        
         self.bag.update(self.gravity, self.wind)
         bag_xy = (self.bag.pos[0], self.bag.pos[1])
 
         #Fixes bag getting stuck glitch
         if self.bag.sliding and not self.board.point_in_board(bag_xy[0], bag_xy[1]):
             self.bag.sliding = False
-            self.last_result = "OFF THE BOARD (+0)"
+            self.strikes += 1
+            if self.strikes >= 3:
+                self.last_result = "OFF THE BOARD. STRIKE 3!"
+                self.game_over = True
+            else:
+                self.last_result = f" OFF THE BOARD. STRIKE {self.strikes}"
+
             self.bag.reset()
             self.power = 0
             self.angle = 45
@@ -317,6 +331,7 @@ class Game:
 
             if distance_squared(bag_xy, hc) <= effective * effective:
                 self.last_result = "IN THE HOLE! (+3)"
+                self.strikes = 0
                 self.add_points(3)
                 self.bag.reset()
                 self.power = 0
@@ -342,6 +357,13 @@ class Game:
 
             else:
                 self.last_result = "MISS (+0)"
+                self.strikes += 1
+                if self.strikes >= 3:
+                    self.last_result = "MISS. STRIKE 3!"
+                    self.game_over = True
+                else:
+                    self.last_result = f"MISS. STRIKE {self.strikes}"
+
                 self.bag.reset()
                 self.power = 0
                 self.angle = 45
@@ -349,17 +371,27 @@ class Game:
                 return
 
         # Sliding finished
-        if (not self.bag.in_flight) and (not self.bag.sliding) and (not self.charging) and (self.last_result != ""):
+        if (not self.bag.in_flight) and (not self.bag.sliding) and self.last_result == "SLIDING...":
 
             bag_xy = (self.bag.pos[0], self.bag.pos[1])
 
             if self.board.point_in_board(bag_xy[0], bag_xy[1]):
                 self.last_result = "ON THE BOARD (+1)"
+                self.strikes = 0
                 self.add_points(1)
-                self.bag.reset()
-                self.power = 0
-                self.angle = 45
-                self.change_wind()
+            else:
+                self.strikes += 1
+                if self.strikes >= 3:
+                    self.last_result = "MISS. STRIKE 3!"
+                    self.game_over = True
+                else:
+                    self.last_result = f"STRIKE {self.strikes}"
+
+            self.bag.reset()
+            self.power = 0
+            self.angle = 45
+            self.change_wind()
+            return
 
     def draw(self):
         self.screen.fill((255, 255, 255))
@@ -389,6 +421,17 @@ class Game:
             (20, 150),
         )
 
+        #Top Center Strikes Display
+        strikes_title = self.font.render("STRIKES", True, (0, 0, 0))
+        strikes_title_rect = strikes_title.get_rect(center=(self.W // 2, 25))
+        self.screen.blit(strikes_title, strikes_title_rect)
+
+        strike_font = pygame.font.SysFont(None, 48)
+        strike_text = "X" * self.strikes
+        strike_surface = strike_font.render(strike_text, True, (200, 0, 0))
+        strike_rect = strike_surface.get_rect(center=(self.W // 2, 60))
+        self.screen.blit(strike_surface, strike_rect)
+
         #Wind Speed in Top Right
         wind_speed = abs(self.wind) * 100
         wind_dir = "E" if self.wind > 0 else "W"
@@ -403,6 +446,11 @@ class Game:
         #Text Positioning
         wind_rect = wind_surface.get_rect(topright = (self.W - 20, 20))
         self.screen.blit(wind_surface, wind_rect)
+
+        if self.game_over:
+            over_surface = self.font.render("GAME OVER - PRESS R TO RESET", True, (200, 0, 0))
+            over_rect = over_surface.get_rect(center=(self.W // 2, 100))
+            self.screen.blit(over_surface, over_rect)
 
         pygame.display.flip()
 
