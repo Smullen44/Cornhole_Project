@@ -220,6 +220,7 @@ class Game:
         self.charging = False
         self.score = 0
         self.last_result = ""
+        self.game_won = False
 
         self.wind = 0.0
         self.change_wind()
@@ -242,6 +243,21 @@ class Game:
         # Positive Value = East Wind. Negative value = West Wind
         self.wind = random.uniform(-.08, .08)
 
+    def add_points(self, points):
+        self.score += points
+
+        if self.score > 15:
+            self.score = 9
+            self.last_result = "WENT OVER 15! RESET TO 9"
+            self.bag.reset()
+            self.power = 0
+            self.angle = 45
+            self.change_wind()
+            
+        if self.score == 15:
+            self.game_won = True
+            self.last_result = "YOU WIN! Press R to play again."
+
 
     def handle_events(self):
         for event in pygame.event.get():
@@ -256,7 +272,11 @@ class Game:
                     self.power = 0
                     self.angle = 45
                     self.change_wind()
-                if event.key == pygame.K_SPACE and (not self.bag.in_flight) and (not self.bag.sliding):
+                    self.game_won = False
+                    self.last_result = ""
+                    self.score = 0
+
+                if event.key == pygame.K_SPACE and (not self.bag.in_flight) and (not self.bag.sliding) and (not self.game_won):
                     self.charging = True
 
             if event.type == pygame.KEYUP:
@@ -280,7 +300,7 @@ class Game:
         self.bag.update(self.gravity, self.wind)
         bag_xy = (self.bag.pos[0], self.bag.pos[1])
 
-        #Fixes bag getting stuck on edge of board glitch
+        #Fixes bag getting stuck glitch
         if self.bag.sliding and not self.board.point_in_board(bag_xy[0], bag_xy[1]):
             self.bag.sliding = False
             self.last_result = "OFF THE BOARD (+0)"
@@ -296,8 +316,8 @@ class Game:
             effective = self.board.hole_radius + self.hole_forgiveness
 
             if distance_squared(bag_xy, hc) <= effective * effective:
-                self.score += 3
                 self.last_result = "IN THE HOLE! (+3)"
+                self.add_points(3)
                 self.bag.reset()
                 self.power = 0
                 self.angle = 45
@@ -334,9 +354,8 @@ class Game:
             bag_xy = (self.bag.pos[0], self.bag.pos[1])
 
             if self.board.point_in_board(bag_xy[0], bag_xy[1]):
-                self.score += 1
                 self.last_result = "ON THE BOARD (+1)"
-
+                self.add_points(1)
                 self.bag.reset()
                 self.power = 0
                 self.angle = 45
