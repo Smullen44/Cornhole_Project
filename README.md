@@ -11,7 +11,13 @@ The goal is to land the bag on the board or into the hole.
 Scoring
 - 3 points – Bag goes into the hole  
 - 1 point – Bag lands and stops on the board  
-- 0 points – Bag misses the board  
+- 0 points – Bag misses the board
+
+Rules
+- Get to 15 points exactly to win
+- If you go over 15, you reset to 9
+- If you miss the board 3 times in a row, Game Over
+- Account for wind!
 
 The board is drawn at an angle to resemble a real cornhole board, and the bag may slide toward the hole
 depending on where it lands.
