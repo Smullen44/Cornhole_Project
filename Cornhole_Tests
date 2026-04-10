@@ -1,158 +1,281 @@
-import os
-import unittest
-import pygame
+import importlib.util
 import math
+import pathlib
+import sys
+import types
 
-# Helps pygame run in headless test environments
-os.environ["SDL_VIDEODRIVER"] = "dummy"
-
-from Midterm_Code import *
-
-
-class TestHelperFunctions(unittest.TestCase):
-
-    def test_clamp_within_range(self):
-        self.assertEqual(clamp(5, 0, 10), 5)
-
-    def test_clamp_below_min(self):
-        self.assertEqual(clamp(-3, 0, 10), 0)
-
-    def test_clamp_above_max(self):
-        self.assertEqual(clamp(15, 0, 10), 10)
-
-    def test_clamp_at_boundaries(self):
-        self.assertEqual(clamp(0, 0, 10), 0)
-        self.assertEqual(clamp(10, 0, 10), 10)
-
-    def test_distance_squared_same_point(self):
-        self.assertEqual(distance_squared((0, 0), (0, 0)), 0)
-
-    def test_distance_squared_known_value(self):
-        self.assertEqual(distance_squared((0, 0), (3, 4)), 25)
-
-    def test_distance_squared_negative_coords(self):
-        self.assertEqual(distance_squared((-1, -1), (2, 3)), 25)
+import pytest
 
 
-class TestBag(unittest.TestCase):
+class FakeSurface:
+    def __init__(self, size=(0, 0)):
+        self.size = size
 
-    def setUp(self):
-        self.bag = Bag((100, 400), 10)
+    def fill(self, color):
+        return None
 
-    def test_initial_position(self):
-        self.assertEqual(self.bag.pos, [100, 400])
-        self.assertFalse(self.bag.in_flight)
-        self.assertFalse(self.bag.sliding)
-
-    def test_reset(self):
-        self.bag.pos = [500, 200]
-        self.bag.in_flight = True
-        self.bag.sliding = True
-        self.bag.slide_speed = 5
-        self.bag.slide_dist_left = 20
-
-        self.bag.reset()
-
-        self.assertEqual(self.bag.pos, [100, 400])
-        self.assertEqual(self.bag.vel, [0.0, 0.0])
-        self.assertFalse(self.bag.in_flight)
-        self.assertFalse(self.bag.sliding)
-        self.assertEqual(self.bag.slide_speed, 0.0)
-        self.assertEqual(self.bag.slide_dist_left, 0.0)
-
-    def test_launch_sets_in_flight(self):
-        self.bag.launch(45, 10)
-        self.assertTrue(self.bag.in_flight)
-        self.assertFalse(self.bag.sliding)
-
-    def test_launch_velocity_direction(self):
-        self.bag.launch(45, 10)
-        self.assertGreater(self.bag.vel[0], 0)
-        self.assertLess(self.bag.vel[1], 0)
-
-    def test_launch_horizontal(self):
-        self.bag.launch(0, 10)
-        self.assertAlmostEqual(self.bag.vel[0], 10, places=2)
-        self.assertAlmostEqual(self.bag.vel[1], 0, places=2)
-
-    def test_update_no_movement_when_grounded(self):
-        self.bag.update(0.35)
-        self.assertEqual(self.bag.pos, [100, 400])
-
-    def test_update_applies_gravity(self):
-        self.bag.launch(45, 10)
-        initial_vy = self.bag.vel[1]
-        self.bag.update(0.35)
-        self.assertGreater(self.bag.vel[1], initial_vy)
-
-    def test_start_slide_sets_sliding_state(self):
-        self.bag.start_slide((0, -1), 5, 20)
-        self.assertFalse(self.bag.in_flight)
-        self.assertTrue(self.bag.sliding)
-        self.assertAlmostEqual(self.bag.slide_speed, 5)
-        self.assertAlmostEqual(self.bag.slide_dist_left, 20)
-
-    def test_update_moves_bag_while_sliding(self):
-        self.bag.start_slide((0, -1), 5, 20)
-        start_pos = self.bag.pos[:]
-        self.bag.update(0.35)
-
-        self.assertEqual(self.bag.pos[0], start_pos[0])
-        self.assertLess(self.bag.pos[1], start_pos[1])
-        self.assertLess(self.bag.slide_speed, 5)
-        self.assertLess(self.bag.slide_dist_left, 20)
-
-    def test_slide_stops_when_distance_runs_out(self):
-        self.bag.start_slide((0, -1), 5, 0)
-        self.bag.update(0.35)
-        self.assertFalse(self.bag.sliding)
+    def blit(self, source, dest):
+        return None
 
 
-class TestBoard(unittest.TestCase):
+class FakeRect:
+    def __init__(self, x, y, w, h):
+        self.x = x
+        self.y = y
+        self.w = w
+        self.h = h
+        self.center = (x + w // 2, y + h // 2)
+        self.topright = (x + w, y)
 
-    def setUp(self):
-        pygame.init()
-        self.board = Board(
-            bl=(620, 460),
-            br=(860, 460),
-            tl=(760, 280),
-            tr=(880, 280),
-            hole_uv=(0.55, 0.80),
-            hole_radius=22
+
+class FakeRenderedText:
+    def __init__(self, text):
+        self.text = text
+
+    def get_rect(self, center=None, topright=None):
+        rect = FakeRect(0, 0, 0, 0)
+        if center is not None:
+            rect.center = center
+        if topright is not None:
+            rect.topright = topright
+        return rect
+
+
+class FakeFont:
+    def render(self, text, antialias, color):
+        return FakeRenderedText(text)
+
+
+class FakeClock:
+    def tick(self, fps):
+        return None
+
+
+class FakeKeyState:
+    def __getitem__(self, key):
+        return False
+
+
+class FakePygame(types.SimpleNamespace):
+    def __init__(self):
+        super().__init__()
+        self.QUIT = 256
+        self.KEYDOWN = 768
+        self.KEYUP = 769
+        self.K_ESCAPE = 27
+        self.K_r = ord("r")
+        self.K_SPACE = 32
+        self.K_UP = 273
+        self.K_DOWN = 274
+
+        self.Surface = FakeSurface
+        self.Rect = FakeRect
+        self.init = lambda: None
+        self.quit = lambda: None
+
+        self.display = types.SimpleNamespace(
+            set_mode=lambda size: FakeSurface(size),
+            set_caption=lambda title: None,
+            flip=lambda: None,
         )
-
-    def tearDown(self):
-        pygame.quit()
-
-    def test_hole_center_returns_point(self):
-        hc = self.board.hole_center_xy()
-        self.assertIsInstance(hc, tuple)
-        self.assertEqual(len(hc), 2)
-
-    def test_hole_center_is_on_board(self):
-        hc = self.board.hole_center_xy()
-        self.assertTrue(self.board.point_in_board(hc[0], hc[1]))
-
-    def test_point_in_board_true_for_inside_point(self):
-        self.assertTrue(self.board.point_in_board(750, 380))
-
-    def test_point_in_board_false_for_outside_point(self):
-        self.assertFalse(self.board.point_in_board(100, 100))
-
-    def test_corner_point_is_not_counted_as_inside(self):
-        self.assertFalse(self.board.point_in_board(620, 460))
-
-    def test_just_outside_bottom_left_is_not_on_board(self):
-        self.assertFalse(self.board.point_in_board(619, 461))
-
-    def test_uv_to_xy_returns_bottom_edge_at_v_zero(self):
-        x, y = self.board.uv_to_xy(0.5, 0.0)
-        self.assertAlmostEqual(y, 460, places=2)
-
-    def test_uv_to_xy_returns_top_edge_at_v_one(self):
-        x, y = self.board.uv_to_xy(0.5, 1.0)
-        self.assertAlmostEqual(y, 280, places=2)
+        self.draw = types.SimpleNamespace(
+            polygon=lambda *args, **kwargs: None,
+            ellipse=lambda *args, **kwargs: None,
+            rect=lambda *args, **kwargs: None,
+            line=lambda *args, **kwargs: None,
+        )
+        self.font = types.SimpleNamespace(SysFont=lambda *args, **kwargs: FakeFont())
+        self.time = types.SimpleNamespace(Clock=lambda: FakeClock())
+        self.event = types.SimpleNamespace(get=lambda: [])
+        self.key = types.SimpleNamespace(get_pressed=lambda: FakeKeyState())
 
 
-if __name__ == "__main__":
-    unittest.main()
+sys.modules.setdefault("pygame", FakePygame())
+
+MODULE_PATH = pathlib.Path("Final_Code.py")
+spec = importlib.util.spec_from_file_location("cornhole_game", MODULE_PATH)
+game = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(game)
+
+
+@pytest.fixture
+def sample_board():
+    return game.Board(
+        bl=(620, 460),
+        br=(860, 460),
+        tl=(760, 280),
+        tr=(880, 280),
+        hole_uv=(0.55, 0.80),
+        hole_radius=22,
+    )
+
+
+@pytest.fixture
+def sample_bag():
+    return game.Bag((120, 450), 10)
+
+
+@pytest.fixture
+def test_game():
+    return game.Game()
+
+
+
+def test_clamp_limits_values():
+    assert game.clamp(50, 10, 80) == 50
+    assert game.clamp(5, 10, 80) == 10
+    assert game.clamp(100, 10, 80) == 80
+
+
+
+def test_distance_squared_returns_expected_value():
+    assert game.distance_squared((0, 0), (3, 4)) == 25
+    assert game.distance_squared((5, 5), (5, 5)) == 0
+
+
+
+def test_board_uv_to_xy_hits_expected_corners(sample_board):
+    assert sample_board.uv_to_xy(0, 0) == sample_board.bl
+    assert sample_board.uv_to_xy(1, 0) == sample_board.br
+    assert sample_board.uv_to_xy(0, 1) == sample_board.tl
+    assert sample_board.uv_to_xy(1, 1) == sample_board.tr
+
+
+
+def test_board_point_in_board_accepts_center_and_rejects_far_point(sample_board):
+    center = sample_board.uv_to_xy(0.5, 0.5)
+    assert sample_board.point_in_board(*center) is True
+    assert sample_board.point_in_board(100, 100) is False
+
+
+
+def test_bag_launch_sets_projectile_velocity(sample_bag):
+    sample_bag.launch(45, math.sqrt(2))
+
+    assert sample_bag.in_flight is True
+    assert sample_bag.sliding is False
+    assert pytest.approx(sample_bag.vel[0], rel=1e-6) == 1.0
+    assert pytest.approx(sample_bag.vel[1], rel=1e-6) == -1.0
+
+
+
+def test_bag_update_applies_gravity_only(sample_bag):
+    sample_bag.launch(0, 10)
+    sample_bag.update(gravity=0.35, wind=0.0)
+
+    assert pytest.approx(sample_bag.vel[0], rel=1e-6) == 10.0
+    assert pytest.approx(sample_bag.pos[0], rel=1e-6) == 130.0
+    assert pytest.approx(sample_bag.pos[1], rel=1e-6) == 450.0
+    assert pytest.approx(sample_bag.vel[1], rel=1e-6) == 0.35
+
+
+def test_bag_update_applies_wind_only(sample_bag):
+    sample_bag.launch(0, 10)
+    sample_bag.update(gravity=0.0, wind=0.08)
+
+    assert pytest.approx(sample_bag.vel[0], rel=1e-6) == 10.08
+    assert pytest.approx(sample_bag.pos[0], rel=1e-6) == 130.08
+    assert pytest.approx(sample_bag.pos[1], rel=1e-6) == 450.0
+    assert pytest.approx(sample_bag.vel[1], rel=1e-6) == 0.0
+
+
+
+def test_bag_start_slide_normalizes_direction(sample_bag):
+    sample_bag.start_slide((0, -5), initial_speed=4, max_distance=20)
+
+    assert sample_bag.in_flight is False
+    assert sample_bag.sliding is True
+    assert sample_bag.slide_dir == (0.0, -1.0)
+    assert sample_bag.slide_speed == 4
+    assert sample_bag.slide_dist_left == 20
+
+
+
+def test_bag_sliding_eventually_stops(sample_bag):
+    sample_bag.start_slide((0, -1), initial_speed=1.0, max_distance=2.0)
+
+    for _ in range(20):
+        sample_bag.update(gravity=0.35)
+
+    assert sample_bag.sliding is False
+    assert sample_bag.in_flight is False
+    assert sample_bag.slide_speed == 0.0
+
+
+
+def test_change_wind_stays_within_expected_range(test_game):
+    for _ in range(200):
+        test_game.change_wind()
+        assert -0.08 <= test_game.wind <= 0.08
+
+
+
+def test_add_points_over_15_resets_score_to_9(test_game):
+    test_game.score = 14
+    test_game.add_points(2)
+
+    assert test_game.score == 9
+    assert test_game.last_result == "WENT OVER 15! RESET TO 9"
+    assert test_game.angle == 45
+    assert test_game.power == 0
+    assert test_game.bag.in_flight is False
+
+
+
+def test_add_points_exactly_15_marks_win(test_game):
+    test_game.score = 12
+    test_game.add_points(3)
+
+    assert test_game.score == 15
+    assert test_game.game_won is True
+    assert test_game.last_result == "YOU WIN! Press R to play again."
+
+
+
+def test_update_scores_hole_shot_and_resets_bag(test_game):
+    hole_x, hole_y = test_game.board.hole_center_xy()
+    test_game.bag.pos = [hole_x, hole_y]
+    test_game.bag.in_flight = True
+    test_game.bag.sliding = False
+    test_game.score = 0
+    test_game.strikes = 2
+
+    test_game.update()
+
+    assert test_game.score == 3
+    assert test_game.last_result == "IN THE HOLE! (+3)"
+    assert test_game.strikes == 0
+    assert test_game.bag.in_flight is False
+    assert test_game.bag.pos == test_game.bag.start_pos
+
+
+
+def test_update_starts_sliding_when_bag_lands_on_board(test_game):
+    landing_point = test_game.board.uv_to_xy(0.5, 0.1)
+    test_game.bag.pos = [landing_point[0], test_game.ground_y - test_game.bag.radius]
+    test_game.bag.vel = [4.0, 3.0]
+    test_game.bag.in_flight = True
+    test_game.bag.sliding = False
+
+    test_game.update()
+
+    assert test_game.bag.in_flight is False
+    assert test_game.bag.sliding is True
+    assert test_game.last_result == "SLIDING..."
+    assert test_game.power == 0
+
+
+
+def test_update_counts_miss_and_strike_when_landing_off_board(test_game):
+    test_game.bag.pos = [100, test_game.ground_y - test_game.bag.radius]
+    test_game.bag.vel = [1.0, 2.0]
+    test_game.bag.in_flight = True
+    test_game.bag.sliding = False
+    test_game.strikes = 0
+
+    test_game.update()
+
+    assert test_game.last_result == "MISS. STRIKE 1"
+    assert test_game.strikes == 1
+    assert test_game.bag.in_flight is False
+    assert test_game.bag.pos == test_game.bag.start_pos
