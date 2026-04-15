@@ -21,12 +21,12 @@ import random
 
 
 # Helper functions
-
-def clamp(value, min_val, max_val): #Clamp a value between min_val and max_val
+#Clamp a value between min_val and max_val
+def clamp(value: float, min_val: float, max_val: float) -> float:
     return max(min_val, min(value, max_val))
 
-
-def distance_squared(a, b): #Return squared distance between points a and b
+#Return squared distance between points a and b
+def distance_squared(a: tuple[float, float], b: tuple[float, float]) -> float:
     dx = a[0] - b[0]
     dy = a[1] - b[1]
     return dx * dx + dy * dy
@@ -82,7 +82,7 @@ class Board:
     def hole_center_xy(self):
         return self.uv_to_xy(*self.hole_uv)
 
-    def point_in_board(self, x, y):
+    def point_in_board(self, x: float, y: float) -> bool:
         # point-in-convex-quad test
         p = (x, y)
         poly = self.poly
@@ -132,7 +132,7 @@ class Bag:
         self.slide_speed = 0.0
         self.slide_dist_left = 0.0
 
-    def launch(self, angle_deg, power):
+    def launch(self, angle_deg: float, power: float) -> None:
         rad = math.radians(angle_deg)
         self.vel[0] = power * math.cos(rad)
         self.vel[1] = -power * math.sin(rad)
@@ -153,7 +153,7 @@ class Bag:
         self.slide_speed = max(0.0, initial_speed)
         self.slide_dist_left = max(0.0, max_distance)
 
-    def update(self, gravity, wind = 0.0):
+    def update(self, gravity: float, wind: float = 0.0) -> None:
         if self.in_flight:
             self.vel[0] += wind
             self.pos[0] += self.vel[0]
